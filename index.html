@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>MIDI Chord Display</title>
+<style>
+  :root {
+    /* ====== НАСТРОЙКИ (меняйте здесь) ====== */
+    --bg-color: #1a1a1a;      /* ЦВЕТ ФОНА — поставьте сюда цвет стана из note-trainer */
+    --text-color: #8e8e8e;    /* ЦВЕТ ТЕКСТА — поставьте сюда цвет кнопок из note-trainer */
+    --font-size-base: 700px;  /* БАЗОВЫЙ РАЗМЕР ШРИФТА аккорда (при масштабе 100%) */
+    --panel-top: 20px;        /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — отступ сверху */
+    --panel-left: 20px;       /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — отступ слева */
+    /* ========================================= */
+
+    --zoom: 100; /* текущий масштаб в процентах, меняется кнопками +/- */
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-color);
+    overflow: hidden;
+  }
+
+  #chordDisplay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-color);
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    font-size: calc(var(--font-size-base) * var(--zoom) / 100);
+    white-space: nowrap;
+    user-select: none;
+    text-align: center;
+    line-height: 1;
+  }
+
+  /* Панель настроек MIDI и зума — по умолчанию скрыта, показывается по клавише E/Т */
+  #controlPanel {
+    position: fixed;
+    top: var(--panel-top, 20px);
+    left: var(--panel-left, 20px);
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.75);
+    color: #eee;
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    z-index: 10;
+    border-radius: 10px;
+    display: block;
+  }
+
+  #controlPanel select, #controlPanel button {
+    font-size: 13px;
+    margin: 2px 4px 2px 0;
+  }
+
+  #zoomLabel {
+    display: inline-block;
+    min-width: 45px;
+  }
+
+  .row { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<div id="controlPanel">
+  <div class="row">
+    <label>MIDI вход: </label>
+    <select id="inputSelect"><option>—</option></select>
+  </div>
+  <div class="row">
+    <label>MIDI выход (напр. loopMIDI): </label>
+    <select id="outputSelect"><option>—</option></select>
+  </div>
+  <div class="row">
+    <button id="zoomOut">-</button>
+    <span id="zoomLabel">100%</span>
+    <button id="zoomIn">+</button>
+    <span style="margin-left:8px;color:#999;">(Shift + "-" = сброс до 100%)</span>
+  </div>
+  <div class="row" id="statusLine" style="color:#8f8;">Ожидание доступа к MIDI...</div>
+</div>
+
+<div id="chordDisplay"></div>
+
+<script>
+(function () {
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  // Шаблоны аккордов: интервалы от корня (0), отсортированы по возрастанию.
+  // Порядок важен только для приоритета при полном совпадении по количеству нот —
+  // сначала проверяем более крупные (длинные) аккорды.
+  const CHORD_TEMPLATES = [
+    { name: '11',       intervals: [0,2,4,5,7,10] },
+    { name: 'maj11',    intervals: [0,2,4,5,7,11] },
+    { name: 'm11',      intervals: [0,2,3,5,7,10] },
+
+    { name: '9',        intervals: [0,2,4,7,10] },
+    { name: 'maj9',     intervals: [0,2,4,7,11] },
+    { name: 'm9',       intervals: [0,2,3,7,10] },
+    { name: 'minmaj9',  intervals: [0,2,3,7,11] },
+
+    { name: '6add9',    intervals: [0,2,4,7,9] },
+
+    { name: '7',        intervals: [0,4,7,10] },
+    { name: 'maj7',     intervals: [0,4,7,11] },
+    { name: 'm7',       intervals: [0,3,7,10] },
+    { name: '7b5',      intervals: [0,4,6,10] },
+    { name: '7#5',      intervals: [0,4,8,10] },
+    { name: 'm7b5',     intervals: [0,3,6,10] },
+    { name: 'minmaj7',  intervals: [0,3,7,11] },
+    { name: '7sus4',    intervals: [0,5,7,10] },
+    { name: '6',        intervals: [0,4,7,9] },
+    { name: 'min6',     intervals: [0,3,7,9] },
+    { name: 'dim7',     intervals: [0,3,6,9] },
+    { name: 'dimM7',    intervals: [0,3,6,11] },
+    { name: 'augM7',    intervals: [0,4,8,11] },
+    { name: 'add9',     intervals: [0,2,4,7] },
+    { name: 'm add9',   intervals: [0,2,3,7] },
+
+    { name: 'maj',      intervals: [0,4,7] },
+    { name: 'min',      intervals: [0,3,7] },
+    { name: 'sus2',     intervals: [0,2,7] },
+    { name: 'sus4',     intervals: [0,5,7] },
+    { name: 'dim',      intervals: [0,3,6] },
+    { name: 'aug',      intervals: [0,4,8] },
+
+    { name: '5',        intervals: [0,7] },
+  ];
+
+  const chordDisplay = document.getElementById('chordDisplay');
+  const inputSelect = document.getElementById('inputSelect');
+  const outputSelect = document.getElementById('outputSelect');
+  const statusLine = document.getElementById('statusLine');
+  const zoomLabel = document.getElementById('zoomLabel');
+
+  let midiAccess = null;
+  let currentInput = null;
+  let currentOutput = null;
+  let heldNotes = new Set(); // MIDI note numbers currently held
+  let pendingOff = new Map(); // note -> timeoutId, delays actual removal to avoid flicker
+  const NOTE_OFF_DELAY_MS = 60; // защита от дребезга/повторных Note On/Off
+
+  // Защита от MIDI-эха: если мы только что отправили сообщение на выход (например, loopMIDI),
+  // а DAW с включённым MIDI Thru/Echo отправляет его обратно нам же на вход —
+  // такое "эхо" не должно считаться новым нажатием/отпусканием ноты.
+  const recentlySent = new Map(); // ключ "status,note,vel" -> timestamp последней отправки
+  const ECHO_WINDOW_MS = 400;
+
+  function markSent(data) {
+    const key = data[0] + ',' + data[1] + ',' + data[2];
+    recentlySent.set(key, performance.now());
+  }
+
+  function isEcho(data) {
+    const key = data[0] + ',' + data[1] + ',' + data[2];
+    const ts = recentlySent.get(key);
+    if (ts === undefined) return false;
+    return (performance.now() - ts) < ECHO_WINDOW_MS;
+  }
+
+  let zoom = 100;
+  const ZOOM_MIN = 10;
+  const ZOOM_MAX = 1000;
+  const ZOOM_STEP = 10;
+
+  function applyZoom() {
+    document.documentElement.style.setProperty('--zoom', zoom);
+    zoomLabel.textContent = zoom + '%';
+  }
+
+  document.getElementById('zoomIn').addEventListener('click', () => {
+    zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
+    applyZoom();
+  });
+
+  document.getElementById('zoomOut').addEventListener('click', (e) => {
+    if (e.shiftKey) {
+      zoom = 100;
+    } else {
+      zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
+    }
+    applyZoom();
+  });
+
+  // Поддержка клавиш + / - на клавиатуре компьютера тоже (не обязательно, но удобно)
+  window.addEventListener('keydown', (e) => {
+    if (e.key === '+' || e.key === '=') {
+      zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
+      applyZoom();
+    } else if (e.key === '-') {
+      if (e.shiftKey) {
+        zoom = 100;
+      } else {
+        zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
+      }
+      applyZoom();
+    }
+  });
+
+  const PLACEHOLDER_TEXT = 'нажмите ноту на клавиатуре';
+  let hasPlayedNote = false;
+
+  function detectChord(noteNumbers) {
+    if (noteNumbers.size === 0) return hasPlayedNote ? '' : PLACEHOLDER_TEXT;
+    const pitchClasses = [...new Set([...noteNumbers].map(n => n % 12))];
+    if (pitchClasses.length === 1) {
+      return NOTE_NAMES[pitchClasses[0]];
+    }
+
+    // Проверяем от самых "больших" (по числу нот) шаблонов к самым простым,
+    // чтобы не путать частичные совпадения.
+    const sortedTemplates = [...CHORD_TEMPLATES].sort((a, b) => b.intervals.length - a.intervals.length);
+
+    for (const tmpl of sortedTemplates) {
+      if (tmpl.intervals.length !== pitchClasses.length) continue;
+      for (const root of pitchClasses) {
+        const rel = pitchClasses
+          .map(pc => (pc - root + 12) % 12)
+          .sort((a, b) => a - b);
+        if (arraysEqual(rel, tmpl.intervals)) {
+          return `${NOTE_NAMES[root]} ${tmpl.name}`;
+        }
+      }
+    }
+
+    // Совпадение не найдено — просто перечисляем ноты
+    return pitchClasses.map(pc => NOTE_NAMES[pc]).join(' ');
+  }
+
+  function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function updateDisplay() {
+    chordDisplay.textContent = detectChord(heldNotes);
+  }
+
+  function onMIDIMessage(event) {
+    const data = event.data;
+    const status = data[0] & 0xf0;
+    const note = data[1];
+    const velocity = data[2];
+
+    console.log('MIDI raw:', Array.from(data), 'status:', status.toString(16), 'note:', note, 'vel:', velocity);
+
+    // Если это эхо нашего же недавно отправленного сообщения (DAW MIDI Thru
+    // отправила его нам обратно через loopMIDI) — игнорируем, чтобы не зациклиться
+    // и не пересчитывать аккорд на пустом месте.
+    if (isEcho(data)) {
+      console.log('  -> проигнорировано как эхо');
+      return;
+    }
+
+    // Пасстру: пересылаем сырое сообщение на выбранный выход как есть
+    if (currentOutput) {
+      try {
+        currentOutput.send(data);
+        markSent(data);
+      } catch (err) {
+        console.error('Ошибка отправки на MIDI выход:', err);
+      }
+    }
+
+    if (status === 0x90 && velocity > 0) {
+      hasPlayedNote = true;
+      if (pendingOff.has(note)) {
+        clearTimeout(pendingOff.get(note));
+        pendingOff.delete(note);
+      }
+      heldNotes.add(note);
+      updateDisplay();
+    } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+      // Снимаем ноту сразу. Небольшая защита от дребезга остаётся,
+      // но само удаление из heldNotes теперь происходит немедленно —
+      // отображение аккорда обновляется мгновенно при отпускании клавиши.
+      if (pendingOff.has(note)) {
+        clearTimeout(pendingOff.get(note));
+        pendingOff.delete(note);
+      }
+      heldNotes.delete(note);
+      updateDisplay();
+    }
+  }
+
+  // Как в note-trainer: слушаем ВСЕ подключённые входы сразу (не только "выбранный"),
+  // и переподключаемся при любом изменении состояния устройств (onstatechange).
+  // Это устраняет проблему, когда конкретное устройство не попадало в выбор/не биндилось.
+  function bindAllInputs() {
+    if (!midiAccess) return;
+    midiAccess.inputs.forEach(inp => {
+      inp.onmidimessage = onMIDIMessage;
+    });
+  }
+
+  function populateSelects() {
+    inputSelect.innerHTML = '';
+    outputSelect.innerHTML = '';
+
+    const inputs = [...midiAccess.inputs.values()];
+    const outputs = [...midiAccess.outputs.values()];
+
+    if (inputs.length === 0) {
+      inputSelect.innerHTML = '<option>Нет входов</option>';
+      statusLine.textContent = 'MIDI входы не найдены';
+      statusLine.style.color = '#f88';
+    } else {
+      inputs.forEach(inp => {
+        const opt = document.createElement('option');
+        opt.value = inp.id;
+        opt.textContent = inp.name + (inp.state !== 'connected' ? ' (не подключено)' : '');
+        inputSelect.appendChild(opt);
+      });
+      statusLine.textContent = `Входы: ${inputs.map(i => i.name).join(', ')}`;
+      statusLine.style.color = '#8f8';
+    }
+
+    if (outputs.length === 0) {
+      outputSelect.innerHTML = '<option>Нет выходов</option>';
+    } else {
+      outputs.forEach(out => {
+        const opt = document.createElement('option');
+        opt.value = out.id;
+        opt.textContent = out.name;
+        outputSelect.appendChild(opt);
+      });
+    }
+
+    // Слушаем ВСЕ входы (не блокируемся выбором одного устройства в списке)
+    bindAllInputs();
+
+    // Выход выбираем один — тот, что отмечен в списке (или первый по умолчанию)
+    if (outputs.length > 0) {
+      const wanted = outputSelect.value || outputs[0].id;
+      selectOutput(wanted);
+    }
+  }
+
+  function selectOutput(id) {
+    currentOutput = [...midiAccess.outputs.values()].find(o => o.id === id) || null;
+    if (currentOutput) {
+      outputSelect.value = id;
+    }
+  }
+
+  outputSelect.addEventListener('change', () => selectOutput(outputSelect.value));
+
+  function requestAccess() {
+    if (!navigator.requestMIDIAccess) {
+      statusLine.textContent = 'Браузер не поддерживает Web MIDI (нужен Chrome/Edge)';
+      statusLine.style.color = '#f88';
+      return;
+    }
+    navigator.requestMIDIAccess({ sysex: false })
+      .then(access => {
+        midiAccess = access;
+        populateSelects();
+        access.onstatechange = () => populateSelects();
+      })
+      .catch(err => {
+        statusLine.textContent = 'Ошибка доступа к MIDI: ' + err +
+          '. Если файл открыт напрямую (file://), запустите его через локальный сервер (http://localhost) — иначе браузер блокирует MIDI.';
+        statusLine.style.color = '#f88';
+      });
+  }
+
+  chordDisplay.textContent = PLACEHOLDER_TEXT;
+
+  requestAccess();
+  applyZoom();
+
+})();
+</script>
+
+</body>
+</html>
