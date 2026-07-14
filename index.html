@@ -71,6 +71,11 @@
 <body>
 
 <div id="controlPanel">
+  <!--
+  ЗАКОММЕНТИРОВАНО: блок выбора MIDI входа/выхода и строка статуса.
+  Скрипт ниже слушает ВСЕ входы разом (bindAllInputs) и сам выбирает первый
+  доступный выход, так что при одной клаве этот UI был не нужен для работы —
+  он только показывал списки устройств и статус.
   <div class="row">
     <label>MIDI вход: </label>
     <select id="inputSelect"><option>—</option></select>
@@ -79,13 +84,19 @@
     <label>MIDI выход (напр. loopMIDI): </label>
     <select id="outputSelect"><option>—</option></select>
   </div>
+  <div class="row" id="statusLine" style="color:#8f8;">Ожидание доступа к MIDI...</div>
+  -->
   <div class="row">
     <button id="zoomOut">-</button>
     <span id="zoomLabel">100%</span>
     <button id="zoomIn">+</button>
     <span style="margin-left:8px;color:#999;">(Shift + "-" = сброс до 100%)</span>
   </div>
-  <div class="row" id="statusLine" style="color:#8f8;">Ожидание доступа к MIDI...</div>
+
+  <!-- Скрытые заглушки, чтобы JS (populateSelects/statusLine) не падал с ошибкой -->
+  <select id="inputSelect" style="display:none"><option>—</option></select>
+  <select id="outputSelect" style="display:none"><option>—</option></select>
+  <div id="statusLine" style="display:none"></div>
 </div>
 
 <div id="chordDisplay"></div>
@@ -164,6 +175,22 @@
     const ts = recentlySent.get(key);
     if (ts === undefined) return false;
     return (performance.now() - ts) < ECHO_WINDOW_MS;
+  }
+
+  // Защита от дублей: мы слушаем ВСЕ MIDI-входы сразу (bindAllInputs), и если одно и то же
+  // физическое нажатие видно системе через два разных порта (напр. клавиатура + её зеркало
+  // через loopMIDI/DAW), одно и то же сообщение приходит несколько раз подряд.
+  // Игнорируем повтор абсолютно идентичного сообщения в течение короткого окна.
+  const recentlyReceived = new Map(); // ключ "status,note,vel" -> timestamp последнего приёма
+  const DUPLICATE_WINDOW_MS = 30;
+
+  function isDuplicate(data) {
+    const key = data[0] + ',' + data[1] + ',' + data[2];
+    const now = performance.now();
+    const ts = recentlyReceived.get(key);
+    recentlyReceived.set(key, now);
+    if (ts === undefined) return false;
+    return (now - ts) < DUPLICATE_WINDOW_MS;
   }
 
   let zoom = 100;
@@ -252,6 +279,12 @@
     const velocity = data[2];
 
     console.log('MIDI raw:', Array.from(data), 'status:', status.toString(16), 'note:', note, 'vel:', velocity);
+
+    // Дубль: то же сообщение только что пришло с другого входа — игнорируем повтор.
+    if (isDuplicate(data)) {
+      console.log('  -> проигнорировано как дубль (несколько входов)');
+      return;
+    }
 
     // Если это эхо нашего же недавно отправленного сообщения (DAW MIDI Thru
     // отправила его нам обратно через loopMIDI) — игнорируем, чтобы не зациклиться
