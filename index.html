@@ -52,7 +52,7 @@
     font-size: 13px;
     z-index: 10;
     border-radius: 10px;
-    display: block;
+    display: none;
   }
 
   #controlPanel select, #controlPanel button {
@@ -86,13 +86,19 @@
     <button id="zoomIn">+</button>
     <span style="margin-left:8px;color:#999;">(Shift + "-" = сброс до 100%)</span>
   </div>
+  <div class="row">
+    <label><input type="checkbox" id="flatsToggle" checked> Бемоли вместо диезов (переключение — И/B)</label>
+  </div>
 </div>
 
 <div id="chordDisplay"></div>
 
 <script>
 (function () {
-  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const NOTE_NAMES_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const NOTE_NAMES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+  let useFlats = true;
+  function noteNames() { return useFlats ? NOTE_NAMES_FLAT : NOTE_NAMES_SHARP; }
 
   // Шаблоны аккордов: интервалы от корня (0), отсортированы по возрастанию.
   // Порядок важен только для приоритета при полном совпадении по количеству нот —
@@ -221,7 +227,17 @@
     } else if (e.key === 'y' || e.key === 'Y' || e.key === 'н' || e.key === 'Н') {
       const panel = document.getElementById('controlPanel');
       panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+    } else if (e.key === 'b' || e.key === 'B' || e.key === 'и' || e.key === 'И') {
+      useFlats = !useFlats;
+      flatsToggle.checked = useFlats;
+      updateDisplay();
     }
+  });
+
+  const flatsToggle = document.getElementById('flatsToggle');
+  flatsToggle.addEventListener('change', () => {
+    useFlats = flatsToggle.checked;
+    updateDisplay();
   });
 
   const PLACEHOLDER_TEXT = 'нажмите ноту на клавиатуре';
@@ -229,9 +245,10 @@
 
   function detectChord(noteNumbers) {
     if (noteNumbers.size === 0) return hasPlayedNote ? '' : PLACEHOLDER_TEXT;
+    const names = noteNames();
     const pitchClasses = [...new Set([...noteNumbers].map(n => n % 12))];
     if (pitchClasses.length === 1) {
-      return NOTE_NAMES[pitchClasses[0]];
+      return names[pitchClasses[0]];
     }
 
     // Проверяем от самых "больших" (по числу нот) шаблонов к самым простым,
@@ -245,13 +262,15 @@
           .map(pc => (pc - root + 12) % 12)
           .sort((a, b) => a - b);
         if (arraysEqual(rel, tmpl.intervals)) {
-          return `${NOTE_NAMES[root]} ${tmpl.name}`;
+          if (tmpl.name === 'maj') return names[root];
+          if (tmpl.name === 'min') return `${names[root]}m`;
+          return `${names[root]} ${tmpl.name}`;
         }
       }
     }
 
     // Совпадение не найдено — просто перечисляем ноты
-    return pitchClasses.map(pc => NOTE_NAMES[pc]).join(' ');
+    return pitchClasses.map(pc => names[pc]).join(' ');
   }
 
   function arraysEqual(a, b) {
@@ -270,8 +289,17 @@
     const note = data[1];
     const velocity = data[2];
 
-    console.log('MIDI raw:', Array.from(data), 'status:', status.toString(16), 'note:', note, 'vel:', velocity);
+    // Дубль: то же сообщение только что пришло с другого входа — игнорируем повтор.
+    if (isDuplicate(data)) {
+      return;
+    }
 
+    // Если это эхо нашего же недавно отправленного сообщения (DAW MIDI Thru
+    // отправила его нам обратно через loopMIDI) — игнорируем, чтобы не зациклиться
+    // и не пересчитывать аккорд на пустом месте.
+    if (isEcho(data)) {
+      return;
+    }
 
     // Пасстру: пересылаем сырое сообщение на выбранный выход как есть
     if (currentOutput) {
