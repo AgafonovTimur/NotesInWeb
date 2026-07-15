@@ -9,8 +9,7 @@
     --bg-color: #1a1a1a;      /* ЦВЕТ ФОНА — поставьте сюда цвет стана из note-trainer */
     --text-color: #8e8e8e;    /* ЦВЕТ ТЕКСТА — поставьте сюда цвет кнопок из note-trainer */
     --font-size-base: 700px;  /* БАЗОВЫЙ РАЗМЕР ШРИФТА аккорда (при масштабе 100%) */
-    --panel-top: 20px;        /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — отступ сверху */
-    --panel-left: 20px;       /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — отступ слева */
+    --panel-top: max(20px, calc(50% - 1000px)); /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — по вертикали (центр экрана минус 1000px вверх, но не выше 20px от верха) */
     /* ========================================= */
 
     --zoom: 100; /* текущий масштаб в процентах, меняется кнопками +/- */
@@ -40,11 +39,12 @@
     line-height: 1;
   }
 
-  /* Панель настроек MIDI и зума — по умолчанию скрыта, показывается по клавише E/Т */
+  /* Панель настроек MIDI и зума — по умолчанию скрыта, показывается по клавише Y/Н (повторное нажатие скрывает) */
   #controlPanel {
     position: fixed;
     top: var(--panel-top, 20px);
-    left: var(--panel-left, 20px);
+    left: 50%;
+    transform: translateX(-50%);
     padding: 10px 14px;
     background: rgba(0,0,0,0.75);
     color: #eee;
@@ -71,11 +71,6 @@
 <body>
 
 <div id="controlPanel">
-  <!--
-  ЗАКОММЕНТИРОВАНО: блок выбора MIDI входа/выхода и строка статуса.
-  Скрипт ниже слушает ВСЕ входы разом (bindAllInputs) и сам выбирает первый
-  доступный выход, так что при одной клаве этот UI был не нужен для работы —
-  он только показывал списки устройств и статус.
   <div class="row">
     <label>MIDI вход: </label>
     <select id="inputSelect"><option>—</option></select>
@@ -85,18 +80,12 @@
     <select id="outputSelect"><option>—</option></select>
   </div>
   <div class="row" id="statusLine" style="color:#8f8;">Ожидание доступа к MIDI...</div>
-  -->
   <div class="row">
     <button id="zoomOut">-</button>
     <span id="zoomLabel">100%</span>
     <button id="zoomIn">+</button>
     <span style="margin-left:8px;color:#999;">(Shift + "-" = сброс до 100%)</span>
   </div>
-
-  <!-- Скрытые заглушки, чтобы JS (populateSelects/statusLine) не падал с ошибкой -->
-  <select id="inputSelect" style="display:none"><option>—</option></select>
-  <select id="outputSelect" style="display:none"><option>—</option></select>
-  <div id="statusLine" style="display:none"></div>
 </div>
 
 <div id="chordDisplay"></div>
@@ -229,6 +218,9 @@
         zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
       }
       applyZoom();
+    } else if (e.key === 'y' || e.key === 'Y' || e.key === 'н' || e.key === 'Н') {
+      const panel = document.getElementById('controlPanel');
+      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
     }
   });
 
