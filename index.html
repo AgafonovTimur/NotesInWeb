@@ -17,9 +17,25 @@
     --text-color: #8e8e8e;    /* ЦВЕТ ТЕКСТА — поставьте сюда цвет кнопок из note-trainer */
     --font-size-base: 700px;  /* БАЗОВЫЙ РАЗМЕР ШРИФТА аккорда (при масштабе 100%) */
     --panel-top: max(20px, calc(50% - 1000px)); /* МЕСТОПОЛОЖЕНИЕ ПАНЕЛИ настроек — по вертикали (центр экрана минус 1000px вверх, но не выше 20px от верха) */
+
+    /* ---- СТРОКА "НОМЕР ОБРАЩЕНИЯ" (#inversionDisplay) — правьте здесь ---- */
+    --inv-color: #8e8e8e;      /* ЦВЕТ цифры обращения - желтый #ffcc00 */
+    --inv-font-size-base: 150px; /* БАЗОВЫЙ РАЗМЕР цифры обращения (при масштабе 100%), меняется клавишами 9 (меньше) / 0 (больше) */
+    --inv-top: 850px;   /* ПОЗИЦИЯ цифры обращения — отступ сверху (хардкодьте как нужно) */
+    --inv-left: 750px;  /* ПОЗИЦИЯ цифры обращения — отступ слева (хардкодьте как нужно) */
+    /* ----------------------------------------------------------------------- */
+
+    /* ---- СТРОКА "СТУПЕНЬ ЛАДА" (#degreeDisplay) — правьте здесь ---- */
+    --degree-color: #8e8e8e;      /* ЦВЕТ цифры/буквы ступени лада - синий #66ccff */
+    --degree-font-size-base: 150px; /* БАЗОВЫЙ РАЗМЕР ступени лада (при масштабе 100%), меняется клавишами 7 (меньше) / 8 (больше) */
+    --degree-top: 850px;   /* ПОЗИЦИЯ ступени лада — отступ сверху (хардкодьте как нужно) */
+    --degree-left: 1800px; /* ПОЗИЦИЯ ступени лада — отступ слева (хардкодьте как нужно) */
+    /* ------------------------------------------------------------------ */
     /* ========================================= */
 
-    --zoom: 100; /* текущий масштаб в процентах, меняется кнопками +/- */
+    --zoom: 100; /* текущий масштаб в процентах, меняется кнопками +/- (относится к строке ноты/аккорда) */
+    --inv-zoom: 100;    /* масштаб строки обращения, меняется клавишами 9/0 */
+    --degree-zoom: 100; /* масштаб строки ступени лада, меняется клавишами 7/8 */
   }
 
   html, body {
@@ -73,6 +89,73 @@
   }
 
   .row { margin-bottom: 6px; }
+
+  #accidentalsBox label {
+    display: inline-block;
+    margin-right: 10px;
+  }
+
+  /* Панель тоники/лада — единственный выбор в каждой группе (как радио-кнопки) */
+  #scalePanel {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid #444;
+  }
+  #scalePanel .groupTitle {
+    color: #aaa;
+    margin: 6px 0 4px;
+    font-size: 12px;
+  }
+  .btnGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 460px;
+  }
+  .toggleBtn {
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toggleBtn:hover { background: #3f3f3f; }
+  .toggleBtn.active {
+    background: #2e7d32;
+    border-color: #4caf50;
+    color: #fff;
+    font-weight: bold;
+  }
+
+  /* Строка с номером обращения аккорда — отдельная, независимая от строки ноты/аккорда */
+  #inversionDisplay {
+    position: fixed;
+    top: var(--inv-top);
+    left: var(--inv-left);
+    color: var(--inv-color);
+    font-family: 'PT Sans Bold Embedded', Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    font-size: calc(var(--inv-font-size-base) * var(--inv-zoom) / 100);
+    white-space: nowrap;
+    user-select: none;
+    line-height: 1;
+  }
+
+  /* Строка со ступенью лада — отдельная, независимая от строки ноты/аккорда и от строки обращения */
+  #degreeDisplay {
+    position: fixed;
+    top: var(--degree-top);
+    left: var(--degree-left);
+    color: var(--degree-color);
+    font-family: 'PT Sans Bold Embedded', Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    font-size: calc(var(--degree-font-size-base) * var(--degree-zoom) / 100);
+    white-space: nowrap;
+    user-select: none;
+    line-height: 1;
+  }
 </style>
 </head>
 <body>
@@ -93,19 +176,52 @@
     <button id="zoomIn">+</button>
     <span style="margin-left:8px;color:#999;">(Shift + "-" = сброс до 100%)</span>
   </div>
+  <div class="row" id="accidentalsBox">
+    <div style="color:#aaa;margin-bottom:4px;">Бемоль вместо диеза (отдельно по нотам):</div>
+    <label><input type="checkbox" class="accCheckbox" data-index="1"> C#/Db</label>
+    <label><input type="checkbox" class="accCheckbox" data-index="3"> D#/Eb</label>
+    <label><input type="checkbox" class="accCheckbox" data-index="6"> F#/Gb</label>
+    <label><input type="checkbox" class="accCheckbox" data-index="8"> G#/Ab</label>
+    <label><input type="checkbox" class="accCheckbox" data-index="10"> A#/Bb</label>
+  </div>
+
+  <div id="scalePanel">
+    <div class="groupTitle">ТОНИКИ (можно выбрать только одну)</div>
+    <div class="btnGrid" id="tonicGrid"></div>
+    <div class="groupTitle">ТОНАЛЬНОСТИ / ЛАДЫ (можно выбрать только один)</div>
+    <div class="btnGrid" id="modeGrid"></div>
+  </div>
+
+  <div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid #444;">
+    <label><input type="checkbox" id="showInversionCheckbox"> Показывать номер обращения аккорда (клавиши 9/0 — размер)</label>
+  </div>
   <div class="row">
-    <label><input type="checkbox" id="flatsToggle" checked> Бемоли вместо диезов (переключение — И/B)</label>
+    <label><input type="checkbox" id="showDegreeCheckbox"> Показывать ступень лада (клавиши 7/8 — размер)</label>
   </div>
 </div>
 
 <div id="chordDisplay"></div>
+<div id="inversionDisplay"></div>
+<div id="degreeDisplay"></div>
 
 <script>
 (function () {
   const NOTE_NAMES_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const NOTE_NAMES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-  let useFlats = true;
-  function noteNames() { return useFlats ? NOTE_NAMES_FLAT : NOTE_NAMES_SHARP; }
+
+  // Индексы нот с диезом/бемолем, для которых можно независимо выбрать написание.
+  const ACCIDENTAL_INDICES = [1, 3, 6, 8, 10];
+  // По умолчанию всё через диезы (как раньше по умолчанию useFlats=true — сохраняем
+  // прежнее визуальное поведение "бемоли по умолчанию" через checked ниже).
+  let useFlatFor = { 1: true, 3: true, 6: true, 8: true, 10: true };
+
+  function noteNames() {
+    const names = [...NOTE_NAMES_SHARP];
+    ACCIDENTAL_INDICES.forEach(i => {
+      if (useFlatFor[i]) names[i] = NOTE_NAMES_FLAT[i];
+    });
+    return names;
+  }
 
   // Шаблоны аккордов: интервалы от корня (0), отсортированы по возрастанию.
   // Порядок важен только для приоритета при полном совпадении по количеству нот —
@@ -148,7 +264,60 @@
     { name: '5',        intervals: [0,7] },
   ];
 
+  // Качество каждого шаблона аккорда для отображения ступени лада римской цифрой:
+  // case: 'upper' — заглавная (мажорное трезвучие в основе), 'lower' — строчная (минорное).
+  // symbol: '' — ничего, '+' — увеличенное трезвучие, '°' — уменьшенное трезвучие.
+  const QUALITY_MAP = {
+    '11':       { case: 'upper', symbol: '' },
+    'maj11':    { case: 'upper', symbol: '' },
+    'm11':      { case: 'lower', symbol: '' },
+    '9':        { case: 'upper', symbol: '' },
+    'maj9':     { case: 'upper', symbol: '' },
+    'm9':       { case: 'lower', symbol: '' },
+    'minmaj9':  { case: 'lower', symbol: '' },
+    '6add9':    { case: 'upper', symbol: '' },
+    '7':        { case: 'upper', symbol: '' },
+    'maj7':     { case: 'upper', symbol: '' },
+    'm7':       { case: 'lower', symbol: '' },
+    '7b5':      { case: 'upper', symbol: '' },
+    '7#5':      { case: 'upper', symbol: '+' },
+    'm7b5':     { case: 'lower', symbol: '°' },
+    'minmaj7':  { case: 'lower', symbol: '' },
+    '7sus4':    { case: 'upper', symbol: '' },
+    '6':        { case: 'upper', symbol: '' },
+    'min6':     { case: 'lower', symbol: '' },
+    'dim7':     { case: 'lower', symbol: '°' },
+    'dimM7':    { case: 'lower', symbol: '°' },
+    'augM7':    { case: 'upper', symbol: '+' },
+    'add9':     { case: 'upper', symbol: '' },
+    'm add9':   { case: 'lower', symbol: '' },
+    'maj':      { case: 'upper', symbol: '' },
+    'min':      { case: 'lower', symbol: '' },
+    'sus2':     { case: 'upper', symbol: '' },
+    'sus4':     { case: 'upper', symbol: '' },
+    'dim':      { case: 'lower', symbol: '°' },
+    'aug':      { case: 'upper', symbol: '+' },
+    '5':        { case: 'upper', symbol: '' },
+  };
+  const DEFAULT_QUALITY = { case: 'upper', symbol: '' }; // используется для одиночной ноты
+
+  // Интервалы ступеней ладов от тоники (полутоны). Порядок ключей соответствует MODES ниже.
+  const MODE_INTERVALS = {
+    major:    [0,2,4,5,7,9,11],
+    natmin:   [0,2,3,5,7,8,10],
+    harmin:   [0,2,3,5,7,8,11],
+    melmin:   [0,2,3,5,7,9,11],
+    dorian:   [0,2,3,5,7,9,10],
+    phrygian: [0,1,3,5,7,8,10],
+    lydian:   [0,2,4,6,7,9,11],
+    mixo:     [0,2,4,5,7,9,10],
+    locrian:  [0,1,3,5,6,8,10],
+  };
+  const ROMAN_NUMERALS = ['I','II','III','IV','V','VI','VII'];
+
   const chordDisplay = document.getElementById('chordDisplay');
+  const inversionDisplay = document.getElementById('inversionDisplay');
+  const degreeDisplay = document.getElementById('degreeDisplay');
   const inputSelect = document.getElementById('inputSelect');
   const outputSelect = document.getElementById('outputSelect');
   const statusLine = document.getElementById('statusLine');
@@ -214,6 +383,43 @@
     zoomLabel.textContent = zoom + '%';
   }
 
+  // Масштаб строки "номер обращения" — клавиши 9 (меньше) / 0 (больше)
+  let invZoom = 100;
+  const INV_ZOOM_MIN = 10;
+  const INV_ZOOM_MAX = 1000;
+  const INV_ZOOM_STEP = 10;
+
+  function applyInvZoom() {
+    document.documentElement.style.setProperty('--inv-zoom', invZoom);
+  }
+
+  // Масштаб строки "ступень лада" — клавиши 7 (меньше) / 8 (больше)
+  let degreeZoom = 100;
+  const DEGREE_ZOOM_MIN = 10;
+  const DEGREE_ZOOM_MAX = 1000;
+  const DEGREE_ZOOM_STEP = 10;
+
+  function applyDegreeZoom() {
+    document.documentElement.style.setProperty('--degree-zoom', degreeZoom);
+  }
+
+  // Показ строк обращения/ступени лада — управляется чекбоксами в панели настроек
+  let showInversions = false;
+  let showDegrees = false;
+
+  const showInversionCheckbox = document.getElementById('showInversionCheckbox');
+  const showDegreeCheckbox = document.getElementById('showDegreeCheckbox');
+
+  showInversionCheckbox.addEventListener('change', () => {
+    showInversions = showInversionCheckbox.checked;
+    updateDisplay();
+  });
+
+  showDegreeCheckbox.addEventListener('change', () => {
+    showDegrees = showDegreeCheckbox.checked;
+    updateDisplay();
+  });
+
   document.getElementById('zoomIn').addEventListener('click', () => {
     zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
     applyZoom();
@@ -244,27 +450,73 @@
       const panel = document.getElementById('controlPanel');
       panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
     } else if (e.key === 'b' || e.key === 'B' || e.key === 'и' || e.key === 'И') {
-      useFlats = !useFlats;
-      flatsToggle.checked = useFlats;
+      // Переключает все 5 чекбоксов разом (если хотя бы один диез — включаем все бемоли, и наоборот)
+      const anyFlat = ACCIDENTAL_INDICES.some(i => useFlatFor[i]);
+      const newVal = !anyFlat;
+      ACCIDENTAL_INDICES.forEach(i => { useFlatFor[i] = newVal; });
+      syncAccidentalCheckboxes();
       updateDisplay();
+    } else if (e.key === '9') {
+      // Уменьшить размер строки "номер обращения"
+      invZoom = Math.max(INV_ZOOM_MIN, invZoom - INV_ZOOM_STEP);
+      applyInvZoom();
+    } else if (e.key === '0') {
+      // Увеличить размер строки "номер обращения"
+      invZoom = Math.min(INV_ZOOM_MAX, invZoom + INV_ZOOM_STEP);
+      applyInvZoom();
+    } else if (e.key === '7') {
+      // Уменьшить размер строки "ступень лада"
+      degreeZoom = Math.max(DEGREE_ZOOM_MIN, degreeZoom - DEGREE_ZOOM_STEP);
+      applyDegreeZoom();
+    } else if (e.key === '8') {
+      // Увеличить размер строки "ступень лада"
+      degreeZoom = Math.min(DEGREE_ZOOM_MAX, degreeZoom + DEGREE_ZOOM_STEP);
+      applyDegreeZoom();
     }
   });
 
-  const flatsToggle = document.getElementById('flatsToggle');
-  flatsToggle.addEventListener('change', () => {
-    useFlats = flatsToggle.checked;
-    updateDisplay();
+  function syncAccidentalCheckboxes() {
+    document.querySelectorAll('.accCheckbox').forEach(cb => {
+      const idx = Number(cb.dataset.index);
+      cb.checked = !!useFlatFor[idx];
+    });
+  }
+
+  document.querySelectorAll('.accCheckbox').forEach(cb => {
+    cb.checked = true; // по умолчанию бемоли
+    cb.addEventListener('change', () => {
+      const idx = Number(cb.dataset.index);
+      useFlatFor[idx] = cb.checked;
+      updateDisplay();
+    });
   });
 
   const PLACEHOLDER_TEXT = 'нажмите ноту на клавиатуре';
   let hasPlayedNote = false;
 
-  function detectChord(noteNumbers) {
-    if (noteNumbers.size === 0) return hasPlayedNote ? '' : PLACEHOLDER_TEXT;
+  // Возвращает структуру с текстом для основной строки, а также данными,
+  // необходимыми для строк "обращение" и "ступень лада":
+  // { text, matched, isSingle, root (pitch class), tmplName, bassPc, orderedPcs }
+  function detectChordInfo(noteNumbers) {
+    if (noteNumbers.size === 0) {
+      return { text: hasPlayedNote ? '' : PLACEHOLDER_TEXT, matched: false };
+    }
     const names = noteNames();
-    const pitchClasses = [...new Set([...noteNumbers].map(n => n % 12))];
+    const noteArr = [...noteNumbers];
+    const bassNote = Math.min(...noteArr);
+    const bassPc = bassNote % 12;
+    const pitchClasses = [...new Set(noteArr.map(n => n % 12))];
+
     if (pitchClasses.length === 1) {
-      return names[pitchClasses[0]];
+      return {
+        text: names[pitchClasses[0]],
+        matched: true,
+        isSingle: true,
+        root: pitchClasses[0],
+        tmplName: null,
+        bassPc,
+        orderedPcs: [pitchClasses[0]],
+      };
     }
 
     // Проверяем от самых "больших" (по числу нот) шаблонов к самым простым,
@@ -278,15 +530,25 @@
           .map(pc => (pc - root + 12) % 12)
           .sort((a, b) => a - b);
         if (arraysEqual(rel, tmpl.intervals)) {
-          if (tmpl.name === 'maj') return names[root];
-          if (tmpl.name === 'min') return `${names[root]}m`;
-          return `${names[root]} ${tmpl.name}`;
+          let text;
+          if (tmpl.name === 'maj') text = names[root];
+          else if (tmpl.name === 'min') text = `${names[root]}m`;
+          else text = `${names[root]} ${tmpl.name}`;
+
+          const orderedPcs = pitchClasses
+            .slice()
+            .sort((a, b) => ((a - root + 12) % 12) - ((b - root + 12) % 12));
+
+          return { text, matched: true, isSingle: false, root, tmplName: tmpl.name, bassPc, orderedPcs };
         }
       }
     }
 
-    // Совпадение не найдено — просто перечисляем ноты
-    return pitchClasses.map(pc => names[pc]).join(' ');
+    // Совпадение не найдено — просто перечисляем ноты (обращение/ступень не показываем)
+    return {
+      text: pitchClasses.map(pc => names[pc]).join(' '),
+      matched: false,
+    };
   }
 
   function arraysEqual(a, b) {
@@ -295,8 +557,52 @@
     return true;
   }
 
+  function updateInversionDisplay(info) {
+    if (!showInversions || !info.matched || info.isSingle) {
+      inversionDisplay.textContent = '';
+      return;
+    }
+    const idx = info.orderedPcs.indexOf(info.bassPc);
+    if (idx <= 0) {
+      // Основной вид (бас = корень аккорда) — номер не показываем
+      inversionDisplay.textContent = '';
+    } else {
+      inversionDisplay.textContent = String(idx + 1);
+    }
+  }
+
+  function degreeIndexInScale(rootPc) {
+    if (!selectedTonic || !selectedMode) return null;
+    const tonicPc = TONICS.indexOf(selectedTonic);
+    const intervals = MODE_INTERVALS[selectedMode];
+    if (!intervals) return null;
+    for (let i = 0; i < intervals.length; i++) {
+      if ((tonicPc + intervals[i]) % 12 === rootPc) return i;
+    }
+    return null; // нота не входит в выбранный лад (хроматическая)
+  }
+
+  function updateDegreeDisplay(info) {
+    if (!showDegrees || !info.matched) {
+      degreeDisplay.textContent = '';
+      return;
+    }
+    const idx = degreeIndexInScale(info.root);
+    if (idx === null) {
+      degreeDisplay.textContent = '';
+      return;
+    }
+    const q = (info.tmplName && QUALITY_MAP[info.tmplName]) || DEFAULT_QUALITY;
+    let numeral = ROMAN_NUMERALS[idx];
+    if (q.case === 'lower') numeral = numeral.toLowerCase();
+    degreeDisplay.textContent = numeral + q.symbol;
+  }
+
   function updateDisplay() {
-    chordDisplay.textContent = detectChord(heldNotes);
+    const info = detectChordInfo(heldNotes);
+    chordDisplay.textContent = info.text;
+    updateInversionDisplay(info);
+    updateDegreeDisplay(info);
   }
 
   function onMIDIMessage(event) {
@@ -441,10 +747,79 @@
       });
   }
 
+  // ====== Выбор тоники / лада (только один вариант в каждой группе, как радио-кнопки) ======
+  const TONICS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const MODES = [
+    { key: 'major',   label: 'Мажор' },
+    { key: 'natmin',  label: 'Натур. минор' },
+    { key: 'harmin',  label: 'Гарм. минор' },
+    { key: 'melmin',  label: 'Мелод. минор' },
+    { key: 'dorian',  label: 'Дорийский' },
+    { key: 'phrygian',label: 'Фригийский' },
+    { key: 'lydian',  label: 'Лидийский' },
+    { key: 'mixo',    label: 'Миксолидийский' },
+    { key: 'locrian', label: 'Локрийский' },
+  ];
+
+  let selectedTonic = null; // например 'C#'
+  let selectedMode = null;  // например 'phrygian'
+
+  const tonicGrid = document.getElementById('tonicGrid');
+  const modeGrid = document.getElementById('modeGrid');
+
+  TONICS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toggleBtn';
+    btn.textContent = t;
+    btn.dataset.tonic = t;
+    btn.addEventListener('click', () => {
+      if (selectedTonic === t) {
+        selectedTonic = null; // повторный клик снимает выбор
+      } else {
+        selectedTonic = t;
+      }
+      refreshScaleButtons();
+      updateDisplay();
+    });
+    tonicGrid.appendChild(btn);
+  });
+
+  MODES.forEach(m => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toggleBtn';
+    btn.textContent = m.label;
+    btn.dataset.mode = m.key;
+    btn.addEventListener('click', () => {
+      if (selectedMode === m.key) {
+        selectedMode = null;
+      } else {
+        selectedMode = m.key;
+      }
+      refreshScaleButtons();
+      updateDisplay();
+    });
+    modeGrid.appendChild(btn);
+  });
+
+  function refreshScaleButtons() {
+    tonicGrid.querySelectorAll('.toggleBtn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tonic === selectedTonic);
+    });
+    modeGrid.querySelectorAll('.toggleBtn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === selectedMode);
+    });
+  }
+  // ==========================================================================================
+
   chordDisplay.textContent = PLACEHOLDER_TEXT;
 
   requestAccess();
   applyZoom();
+  applyInvZoom();
+  applyDegreeZoom();
+  syncAccidentalCheckboxes();
 
 })();
 </script>
