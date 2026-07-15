@@ -161,6 +161,15 @@
   let pendingOff = new Map(); // note -> timeoutId, delays actual removal to avoid flicker
   const NOTE_OFF_DELAY_MS = 60; // защита от дребезга/повторных Note On/Off
 
+  // Окно захвата аккорда: при каждом новом нажатии таймер перезапускается.
+  // Ноты отображаются только после того, как пройдёт CHORD_CAPTURE_WINDOW_MS
+  // мс "тишины" (без новых нажатий) с момента последней нажатой ноты.
+  // Правьте это значение, чтобы изменить длительность окна (в миллисекундах).
+  const CHORD_CAPTURE_WINDOW_MS = 50;
+  let capturedNotes = new Set(); // ноты, накапливаемые в текущем окне захвата
+  let captureFinished = true;    // true, если предыдущий захваченный аккорд уже отображён
+  let captureWindowTimer = null;
+
   // Защита от MIDI-эха: если мы только что отправили сообщение на выход (например, loopMIDI),
   // а DAW с включённым MIDI Thru/Echo отправляет его обратно нам же на вход —
   // такое "эхо" не должно считаться новым нажатием/отпусканием ноты.
@@ -324,18 +333,30 @@
         clearTimeout(pendingOff.get(note));
         pendingOff.delete(note);
       }
-      heldNotes.add(note);
-      updateDisplay();
-    } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
-      // Снимаем ноту сразу. Небольшая защита от дребезга остаётся,
-      // но само удаление из heldNotes теперь происходит немедленно —
-      // отображение аккорда обновляется мгновенно при отпускании клавиши.
-      if (pendingOff.has(note)) {
-        clearTimeout(pendingOff.get(note));
-        pendingOff.delete(note);
+
+      if (captureFinished) {
+        // Предыдущий аккорд уже был отображён (или это самое первое нажатие) —
+        // начинаем накапливать новый аккорд с чистого листа.
+        capturedNotes.clear();
+        captureFinished = false;
       }
-      heldNotes.delete(note);
-      updateDisplay();
+      capturedNotes.add(note);
+
+      // Любое новое нажатие перезапускает таймер: отображение произойдёт
+      // только после CHORD_CAPTURE_WINDOW_MS мс без новых нажатий.
+      if (captureWindowTimer) {
+        clearTimeout(captureWindowTimer);
+      }
+      captureWindowTimer = setTimeout(() => {
+        heldNotes = new Set(capturedNotes);
+        updateDisplay();
+        captureFinished = true;
+        captureWindowTimer = null;
+      }, CHORD_CAPTURE_WINDOW_MS);
+    } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+      // Отпускания клавиш больше не учитываются: нота остаётся в heldNotes
+      // и в отображении до тех пор, пока не будет нажата новая.
+      return;
     }
   }
 
