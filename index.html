@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>MIDI Chord Display</title>
+<title>Full Display Chords</title>
 <style>
 @font-face {
   font-family: 'PT Sans Bold Embedded';
@@ -53,7 +53,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
     color: var(--text-color);
-    font-family: 'PT Sans Bold Embedded', Arial, Helvetica, sans-serif;
+    font-family: 'PT Sans Bold Embedded', Arial, Helvetica, sans-serif; 
     font-weight: 700;
     font-size: calc(var(--font-size-base) * var(--zoom) / 100);
     white-space: nowrap;
@@ -71,7 +71,7 @@
     padding: 10px 14px;
     background: rgba(0,0,0,0.75);
     color: #eee;
-    font-family: Arial, sans-serif;
+    font-family: 'PT Sans Bold Embedded', Arial, sans-serif;
     font-size: 13px;
     z-index: 10;
     border-radius: 10px;
@@ -413,16 +413,19 @@
   showInversionCheckbox.addEventListener('change', () => {
     showInversions = showInversionCheckbox.checked;
     updateDisplay();
+    saveSettings();
   });
 
   showDegreeCheckbox.addEventListener('change', () => {
     showDegrees = showDegreeCheckbox.checked;
     updateDisplay();
+    saveSettings();
   });
 
   document.getElementById('zoomIn').addEventListener('click', () => {
     zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
     applyZoom();
+    saveSettings();
   });
 
   document.getElementById('zoomOut').addEventListener('click', (e) => {
@@ -432,6 +435,7 @@
       zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
     }
     applyZoom();
+    saveSettings();
   });
 
   // Поддержка клавиш + / - на клавиатуре компьютера тоже (не обязательно, но удобно)
@@ -439,6 +443,7 @@
     if (e.key === '+' || e.key === '=') {
       zoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP);
       applyZoom();
+      saveSettings();
     } else if (e.key === '-') {
       if (e.shiftKey) {
         zoom = 100;
@@ -446,6 +451,7 @@
         zoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP);
       }
       applyZoom();
+      saveSettings();
     } else if (e.key === 'y' || e.key === 'Y' || e.key === 'н' || e.key === 'Н') {
       const panel = document.getElementById('controlPanel');
       panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
@@ -456,22 +462,27 @@
       ACCIDENTAL_INDICES.forEach(i => { useFlatFor[i] = newVal; });
       syncAccidentalCheckboxes();
       updateDisplay();
+      saveSettings();
     } else if (e.key === '9') {
       // Уменьшить размер строки "номер обращения"
       invZoom = Math.max(INV_ZOOM_MIN, invZoom - INV_ZOOM_STEP);
       applyInvZoom();
+      saveSettings();
     } else if (e.key === '0') {
       // Увеличить размер строки "номер обращения"
       invZoom = Math.min(INV_ZOOM_MAX, invZoom + INV_ZOOM_STEP);
       applyInvZoom();
+      saveSettings();
     } else if (e.key === '7') {
       // Уменьшить размер строки "ступень лада"
       degreeZoom = Math.max(DEGREE_ZOOM_MIN, degreeZoom - DEGREE_ZOOM_STEP);
       applyDegreeZoom();
+      saveSettings();
     } else if (e.key === '8') {
       // Увеличить размер строки "ступень лада"
       degreeZoom = Math.min(DEGREE_ZOOM_MAX, degreeZoom + DEGREE_ZOOM_STEP);
       applyDegreeZoom();
+      saveSettings();
     }
   });
 
@@ -488,6 +499,7 @@
       const idx = Number(cb.dataset.index);
       useFlatFor[idx] = cb.checked;
       updateDisplay();
+      saveSettings();
     });
   });
 
@@ -781,6 +793,7 @@
       }
       refreshScaleButtons();
       updateDisplay();
+      saveSettings();
     });
     tonicGrid.appendChild(btn);
   });
@@ -799,6 +812,7 @@
       }
       refreshScaleButtons();
       updateDisplay();
+      saveSettings();
     });
     modeGrid.appendChild(btn);
   });
@@ -813,13 +827,62 @@
   }
   // ==========================================================================================
 
+  // ====== Сохранение/восстановление настроек (галки, тоника/лад, масштаб) ======
+  const SETTINGS_STORAGE_KEY = 'midiChordDisplaySettings';
+
+  function saveSettings() {
+    try {
+      const data = {
+        useFlatFor,
+        showInversions,
+        showDegrees,
+        selectedTonic,
+        selectedMode,
+        zoom,
+        invZoom,
+        degreeZoom,
+      };
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(data));
+    } catch (err) {
+      console.error('Не удалось сохранить настройки:', err);
+    }
+  }
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.useFlatFor) {
+        ACCIDENTAL_INDICES.forEach(i => {
+          if (data.useFlatFor[i] !== undefined) useFlatFor[i] = data.useFlatFor[i];
+        });
+      }
+      if (typeof data.showInversions === 'boolean') showInversions = data.showInversions;
+      if (typeof data.showDegrees === 'boolean') showDegrees = data.showDegrees;
+      if (typeof data.selectedTonic === 'string' || data.selectedTonic === null) selectedTonic = data.selectedTonic;
+      if (typeof data.selectedMode === 'string' || data.selectedMode === null) selectedMode = data.selectedMode;
+      if (typeof data.zoom === 'number') zoom = data.zoom;
+      if (typeof data.invZoom === 'number') invZoom = data.invZoom;
+      if (typeof data.degreeZoom === 'number') degreeZoom = data.degreeZoom;
+    } catch (err) {
+      console.error('Не удалось загрузить настройки:', err);
+    }
+  }
+  // ==============================================================================
+
   chordDisplay.textContent = PLACEHOLDER_TEXT;
 
   requestAccess();
+  loadSettings();
   applyZoom();
   applyInvZoom();
   applyDegreeZoom();
   syncAccidentalCheckboxes();
+  refreshScaleButtons();
+  showInversionCheckbox.checked = showInversions;
+  showDegreeCheckbox.checked = showDegrees;
+  updateDisplay();
 
 })();
 </script>
